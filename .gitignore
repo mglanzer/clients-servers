@@ -156,11 +156,7 @@ local.properties
 ### Custom stuff ###
 *.log
 results
-big-tests/gatling
-gatling/reports
-/pos-generic-service/src/test/resources/json/generated-swagger.json
-/pos-generic-service/src/main/resources/info/buildversion.info
 classes/
 .gradletasknamecache
 out/
-/pos-generic-big-tests/pos-generic-test-generated.txt
+

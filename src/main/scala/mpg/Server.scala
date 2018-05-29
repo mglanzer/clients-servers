@@ -1,10 +1,16 @@
 package mpg
 
-import scala.util.Try
+import mpg.Server.TerminationFunction
 
-case class ServerConfig(port: Int)
+case class ServerConfig(
+                         interface: String = "localhost",
+                         port: Int = 8088
+                       )
+
+object Server {
+  type TerminationFunction = () => Unit
+}
 
 trait Server {
-  def start(implicit config: ServerConfig): Try[String]
-  def stop(): Unit
+  def start(implicit config: ServerConfig): TerminationFunction
 }

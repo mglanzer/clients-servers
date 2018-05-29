@@ -6,11 +6,10 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
-import com.typesafe.config.DefaultConfigLoadingStrategy
+import mpg.Server.TerminationFunction
 import mpg.{Server, ServerConfig}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.Try
 
 class AkkaHttpServer extends Server {
 
@@ -20,24 +19,20 @@ class AkkaHttpServer extends Server {
 
   private var bindingFuture: Future[Http.ServerBinding] = _
 
-  override def start(implicit config: ServerConfig): Try[String] = {
+  override def start(implicit config: ServerConfig): TerminationFunction = {
 
     val route: Route =
-      path("hello") {
+      pathSingleSlash {
         get {
           complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Say hello to akka-http"))
         }
       }
 
-    Try({
-      bindingFuture = Http().bindAndHandle(route, "localhost", config.port)
-      s"Server online at http://localhost:${config.port}/"
-    })
-  }
+    bindingFuture = Http().bindAndHandle(route, config.interface, config.port)
 
-  override def stop(): Unit = {
-    bindingFuture
-      .flatMap(_.unbind()) // trigger unbinding from the port
-      .onComplete(_ => system.terminate()) // and shutdown when done
+    () =>
+      bindingFuture
+        .flatMap(_.unbind()) // trigger unbinding from the port
+        .onComplete(_ => system.terminate())
   }
 }
