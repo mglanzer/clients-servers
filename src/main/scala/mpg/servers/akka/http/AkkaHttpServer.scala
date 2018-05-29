@@ -11,7 +11,7 @@ import mpg.{Server, ServerConfig}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class AkkaHttpServer extends Server {
+object AkkaHttpServer extends Server {
 
   private lazy implicit val system: ActorSystem = ActorSystem("AkkaHttpServer")
   private lazy implicit val materializer: ActorMaterializer = ActorMaterializer()

@@ -1,7 +1,7 @@
 package mpg
 
 import mpg.clients.akka.http.AkkaHttpClient
-import mpg.servers.akka.http.AkkaHttpServer
+import mpg.servers.akka.http.{AkkaHttpServer, UiServer}
 import org.rogach.scallop._
 
 import scala.io.StdIn
@@ -50,7 +50,8 @@ object StartServer {
 
   def go(conf: Conf): Unit = {
     def resolveServer: Option[Server] = conf.serve.server().toLowerCase() match {
-      case "akka" => Some(new AkkaHttpServer)
+      case "akka" => Some(AkkaHttpServer)
+      case "ui" => Some(UiServer)
       case _ => None
     }
 
