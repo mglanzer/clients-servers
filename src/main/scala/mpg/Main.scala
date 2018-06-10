@@ -17,6 +17,7 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
   val serve = new Subcommand(Commands.serve) {
     val server: ScallopOption[String] = opt[String]("server", 's', required = true)
     val port: ScallopOption[Int] = opt[Int]("port", 'p', required = true)
+    val clusterPort: ScallopOption[Int] = opt[Int]("clusterPort", 'c')
   }
 
   val request = new Subcommand(Commands.request) {
@@ -55,10 +56,18 @@ object StartServer {
       case _ => None
     }
 
+    val port = conf.serve.port()
+    val config = ServerConfig(
+      port = port,
+      akkaClusterPort = conf.serve.clusterPort.getOrElse(5221)
+    )
+
     resolveServer
-      .map(server => server.start(ServerConfig(port = conf.serve.port())))
+      .map(server => {
+        server.start(config)
+      })
       .foreach(terminationFunc => {
-        println(s"Server online at http://localhost:${conf.serve.port()}/")
+        println(s"Server online at http://localhost:$port/")
         println("Press Enter to stop")
         StdIn.readLine()
         terminationFunc()
