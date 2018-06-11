@@ -4,8 +4,9 @@ import mpg.Server.TerminationFunction
 
 case class ServerConfig(
                          interface: String = "localhost",
-                         port: Int = 8088,
-                         akkaClusterPort: Int = 5221,
+                         port: Option[Int] = None,
+                         akkaSystemName: Option[String] = None,
+                         akkaClusterPort: Option[Int] = None,
                          eventListener: ServerEvent => Unit = _ => {}
                        )
 

@@ -37,7 +37,7 @@ object UiServer extends Server {
 
   override def start(implicit config: ServerConfig): TerminationFunction = {
 
-    bindingFuture = Http().bindAndHandle(websocketRoute, config.interface, config.port)
+    bindingFuture = Http().bindAndHandle(websocketRoute, config.interface, config.port.get)
 
     () =>
       bindingFuture

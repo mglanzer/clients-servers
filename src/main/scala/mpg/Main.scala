@@ -1,7 +1,7 @@
 package mpg
 
 import mpg.clients.akka.http.AkkaHttpClient
-import mpg.servers.akka.http.{AkkaHttpServer, UiServer}
+import mpg.servers.akka.http.{AkkaClusterNode, AkkaHttpServer, UiServer}
 import org.rogach.scallop._
 
 import scala.io.StdIn
@@ -16,8 +16,9 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
 
   val serve = new Subcommand(Commands.serve) {
     val server: ScallopOption[String] = opt[String]("server", 's', required = true)
-    val port: ScallopOption[Int] = opt[Int]("port", 'p', required = true)
+    val port: ScallopOption[Int] = opt[Int]("port", 'p')
     val clusterPort: ScallopOption[Int] = opt[Int]("clusterPort", 'c')
+    val systemName: ScallopOption[String] = opt[String]("systemName", 'n')
   }
 
   val request = new Subcommand(Commands.request) {
@@ -51,15 +52,16 @@ object StartServer {
 
   def go(conf: Conf): Unit = {
     def resolveServer: Option[Server] = conf.serve.server().toLowerCase() match {
-      case "akka" => Some(AkkaHttpServer)
+      case "akka-http" => Some(AkkaHttpServer)
+      case "akka-node" => Some(AkkaClusterNode)
       case "ui" => Some(UiServer)
       case _ => None
     }
 
-    val port = conf.serve.port()
     val config = ServerConfig(
-      port = port,
-      akkaClusterPort = conf.serve.clusterPort.getOrElse(5221)
+      port = conf.serve.port.toOption,
+      akkaSystemName = conf.serve.systemName.toOption,
+      akkaClusterPort = conf.serve.clusterPort.toOption
     )
 
     resolveServer
@@ -67,7 +69,6 @@ object StartServer {
         server.start(config)
       })
       .foreach(terminationFunc => {
-        println(s"Server online at http://localhost:$port/")
         println("Press Enter to stop")
         StdIn.readLine()
         terminationFunc()
