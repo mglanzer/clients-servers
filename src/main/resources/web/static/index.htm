@@ -1,0 +1,32 @@
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.5.16/dist/vue.js"></script>
+</head>
+<body>
+<div id="app">
+    <ol>
+        <li v-for="event in events">
+            {{ event.msg }}
+        </li>
+    </ol>
+</div>
+</body>
+</html>
+
+<script language="javascript">
+
+    var app = new Vue({
+        el: '#app',
+        data: {
+            events: []
+        }
+    });
+
+    var ws = new WebSocket("http://localhost:8088/ws");
+
+    ws.onmessage = function (event) {
+        console.log(event.data);
+        app.data.events.push({ msg: event })
+    }
+
+</script>

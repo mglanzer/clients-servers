@@ -2,10 +2,11 @@ package mpg.servers.akka.http
 
 import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.ws.{BinaryMessage, Message, TextMessage}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import mpg.Server.TerminationFunction
 import mpg.{Server, ServerConfig}
 
@@ -24,12 +25,25 @@ object AkkaHttpServer extends Server {
 
     system.actorOf(Props(classOf[SimpleClusterListener]))
 
+    def greeter: Flow[Message, Message, Any] =
+      Flow[Message].mapConcat {
+        case tm: TextMessage =>
+          TextMessage(Source.single("Hello ") ++ tm.textStream ++ Source.single("!")) :: Nil
+        case bm: BinaryMessage =>
+          // ignore binary messages but drain content to avoid the stream being clogged
+          bm.dataStream.runWith(Sink.ignore)
+          Nil
+      }
+
     val route: Route =
       pathSingleSlash {
         get {
-          complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Say hello to akka-http"))
+          getFromResource("web/static/index.htm")
         }
-      }
+      } ~
+        path("ws") {
+          handleWebSocketMessages(greeter)
+        }
 
     bindingFuture = Http().bindAndHandle(route, config.interface, config.port.get)
     println(s"Server online at http://localhost:${config.port.get}/")
