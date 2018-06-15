@@ -22,11 +22,11 @@
         }
     });
 
-    var ws = new WebSocket("http://localhost:8088/ws");
+    var ws = new WebSocket("ws://localhost:8088/ws");
 
     ws.onmessage = function (event) {
-        console.log(event.data);
-        app.data.events.push({ msg: event })
+        console.log(event);
+        app.events.push({ msg: event.data })
     }
 
 </script>

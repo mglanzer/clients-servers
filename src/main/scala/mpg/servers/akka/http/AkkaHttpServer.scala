@@ -1,16 +1,42 @@
 package mpg.servers.akka.http
 
-import akka.actor.{ActorSystem, Props}
+import akka.NotUsed
+import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.{BinaryMessage, Message, TextMessage}
+import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.stream.{ActorMaterializer, OverflowStrategy}
 import mpg.Server.TerminationFunction
+import mpg.servers.akka.http.ClusterListener.AddListener
+import mpg.servers.akka.http.WSActor.{Connect, InMsg, OutMsg}
 import mpg.{Server, ServerConfig}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+
+object WSActor {
+
+  case class Connect(outChannel: ActorRef)
+
+  case class InMsg(value: String)
+
+  case class OutMsg(value: String)
+
+}
+
+class WSActor() extends Actor {
+
+  override def receive: Receive = {
+    case Connect(outChannel) => context.become(connected(outChannel))
+  }
+
+  def connected(outChannel: ActorRef): Receive = {
+    case InMsg(msg) => println(msg)
+    case msg: OutMsg => outChannel ! msg
+    case msg: String => outChannel ! OutMsg(msg)
+  }
+}
 
 object AkkaHttpServer extends Server {
 
@@ -23,17 +49,33 @@ object AkkaHttpServer extends Server {
     implicit val materializer: ActorMaterializer = akkaContext.materializer
     implicit val executionContext: ExecutionContextExecutor = akkaContext.executionContext
 
-    system.actorOf(Props(classOf[SimpleClusterListener]))
+    val clusterListener = system.actorOf(Props(classOf[ClusterListener]), "ClusterListener")
 
-    def greeter: Flow[Message, Message, Any] =
-      Flow[Message].mapConcat {
-        case tm: TextMessage =>
-          TextMessage(Source.single("Hello ") ++ tm.textStream ++ Source.single("!")) :: Nil
-        case bm: BinaryMessage =>
-          // ignore binary messages but drain content to avoid the stream being clogged
-          bm.dataStream.runWith(Sink.ignore)
-          Nil
-      }
+    var connectionCount = 0
+
+    def wsConnection(): Flow[Message, Message, NotUsed] = {
+
+      val wsActor = system.actorOf(Props[WSActor], s"ws_$connectionCount")
+      connectionCount += 1
+      clusterListener ! AddListener(wsActor)
+
+      // In channel sends to wsActor
+      val incomingMessages: Sink[Message, NotUsed] =
+        Flow[Message].map {
+          case TextMessage.Strict(text) => WSActor.InMsg(text)
+        }.to(Sink.actorRef[WSActor.InMsg](wsActor, PoisonPill))
+
+      // Out channel is provided to wsActor via connect
+      val outgoingMessages: Source[Message, NotUsed] =
+        Source.actorRef[WSActor.OutMsg](10, OverflowStrategy.fail)
+          .mapMaterializedValue { outActor =>
+            wsActor ! WSActor.Connect(outActor)
+            NotUsed
+          }.map(
+          (outMsg: WSActor.OutMsg) => TextMessage(outMsg.value))
+
+      Flow.fromSinkAndSource(incomingMessages, outgoingMessages)
+    }
 
     val route: Route =
       pathSingleSlash {
@@ -42,7 +84,7 @@ object AkkaHttpServer extends Server {
         }
       } ~
         path("ws") {
-          handleWebSocketMessages(greeter)
+          handleWebSocketMessages(wsConnection())
         }
 
     bindingFuture = Http().bindAndHandle(route, config.interface, config.port.get)

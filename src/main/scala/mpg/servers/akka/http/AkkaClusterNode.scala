@@ -17,7 +17,7 @@ object AkkaClusterNode extends Server {
 
     // TODO: control root of actor tree w/supervising actor
 
-    system.actorOf(Props(classOf[SimpleClusterListener]))
+    system.actorOf(Props(classOf[ClusterListener]))
 
     () => system.terminate()
   }
