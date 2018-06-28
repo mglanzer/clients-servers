@@ -49,13 +49,16 @@ object AkkaHttpServer extends Server {
     implicit val materializer: ActorMaterializer = akkaContext.materializer
     implicit val executionContext: ExecutionContextExecutor = akkaContext.executionContext
 
+    val shardRef = EntityActor.startClusterSharding(system)
+    system.actorOf(Props(classOf[EntityWorkSupervisor], shardRef))
+
     val clusterListener = system.actorOf(Props(classOf[ClusterListener]), "ClusterListener")
 
     var connectionCount = 0
 
     def wsConnection(): Flow[Message, Message, NotUsed] = {
 
-      val wsActor = system.actorOf(Props[WSActor], s"ws_$connectionCount")
+      val wsActor = system.actorOf(Props[WSActor], "wsUi")
       connectionCount += 1
       clusterListener ! AddListener(wsActor)
 
@@ -63,6 +66,7 @@ object AkkaHttpServer extends Server {
       val incomingMessages: Sink[Message, NotUsed] =
         Flow[Message].map {
           case TextMessage.Strict(text) => WSActor.InMsg(text)
+          case _ => throw new RuntimeException("Only TextMessage is implemented")
         }.to(Sink.actorRef[WSActor.InMsg](wsActor, PoisonPill))
 
       // Out channel is provided to wsActor via connect
