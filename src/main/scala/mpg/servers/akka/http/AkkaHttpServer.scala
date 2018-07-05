@@ -1,7 +1,7 @@
 package mpg.servers.akka.http
 
 import akka.NotUsed
-import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.server.Directives._
@@ -25,10 +25,11 @@ object WSActor {
 
 }
 
-class WSActor() extends Actor {
+class WSActor extends Actor with ActorLogging {
 
   override def receive: Receive = {
-    case Connect(outChannel) => context.become(connected(outChannel))
+    case Connect(outChannel) =>
+      context.become(connected(outChannel))
   }
 
   def connected(outChannel: ActorRef): Receive = {
@@ -52,28 +53,25 @@ object AkkaHttpServer extends Server {
     val shardRef = EntityActor.startClusterSharding(system)
     system.actorOf(Props(classOf[EntityWorkSupervisor], shardRef))
 
-    val clusterListener = system.actorOf(Props(classOf[ClusterListener]), "ClusterListener")
+    WsUiSingletonSupport.initializeClusterSingleton(system)
+    val wsProxy = WsUiSingletonSupport.wsUiProxy
 
-    var connectionCount = 0
+    val clusterListener = system.actorOf(Props(classOf[ClusterListener]), "ClusterListener")
+    clusterListener ! AddListener(wsProxy)
 
     def wsConnection(): Flow[Message, Message, NotUsed] = {
-
-      val wsActor = system.actorOf(Props[WSActor], "wsUi")
-      connectionCount += 1
-      clusterListener ! AddListener(wsActor)
-
       // In channel sends to wsActor
       val incomingMessages: Sink[Message, NotUsed] =
         Flow[Message].map {
           case TextMessage.Strict(text) => WSActor.InMsg(text)
           case _ => throw new RuntimeException("Only TextMessage is implemented")
-        }.to(Sink.actorRef[WSActor.InMsg](wsActor, PoisonPill))
+        }.to(Sink.actorRef[WSActor.InMsg](wsProxy, PoisonPill))
 
       // Out channel is provided to wsActor via connect
       val outgoingMessages: Source[Message, NotUsed] =
         Source.actorRef[WSActor.OutMsg](10, OverflowStrategy.fail)
           .mapMaterializedValue { outActor =>
-            wsActor ! WSActor.Connect(outActor)
+            wsProxy ! WSActor.Connect(outActor)
             NotUsed
           }.map(
           (outMsg: WSActor.OutMsg) => TextMessage(outMsg.value))

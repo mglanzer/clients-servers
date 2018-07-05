@@ -4,11 +4,14 @@
 </head>
 <body>
 <div id="app">
-    <ol>
-        <li v-for="event in events">
-            {{ event.msg }}
+    <ul>
+        <li v-for="node in nodes">
+            <h6>{{ node.name }}</h6>
+            <ul v-for="entity in node.entities">
+                <li><span style="font-weight: bold">{{ entity.entityId }}</span> Data: {{ entity.data }}</li>
+            </ul>
         </li>
-    </ol>
+    </ul>
 </div>
 </body>
 </html>
@@ -18,15 +21,64 @@
     var app = new Vue({
         el: '#app',
         data: {
-            events: []
+            nodes: []
         }
     });
 
     var ws = new WebSocket("ws://localhost:8088/ws");
 
-    ws.onmessage = function (event) {
-        console.log(event);
-        app.events.push({ msg: event.data })
+    ws.onmessage = function (entity) {
+        console.log(entity);
+
+        var entityReport = JSON.parse(entity.data);
+
+        var nodeMatch = app.nodes.filter(function (node) {
+            return node.name === entityReport.node
+        });
+
+        // Remove entities from previous nodes if any
+        app.nodes
+            .filter(function (node) {
+                return node.name !== entityReport.node;
+            })
+            .forEach(function (node) {
+                node.entities
+                    .filter(function (entity) {
+                        return entity.entityId === entityReport.entityId;
+                    })
+                    .forEach(function (entity) {
+                        node.entities.splice(node.entities.indexOf(entity), 1)
+                    })
+            });
+
+        if (nodeMatch.length > 0) {
+            nodeMatch.forEach(function (node) {
+
+                var entityMatch = node.entities.filter(function (e) {
+                        return e.entityId === entityReport.entityId;
+                    }
+                );
+
+                if (entityMatch.length > 0) {
+                    entityMatch.forEach(function (e) {
+                        e.node = entityReport.node;
+                        e.entityId = entityReport.entityId;
+                        e.data = entityReport.data;
+                    })
+                } else {
+                    node.entities.push(entityReport)
+                }
+
+            })
+        } else {
+            var node = {
+                name: entityReport.node,
+                entities: [
+                    entityReport
+                ]
+            };
+            app.nodes.push(node)
+        }
     }
 
 </script>

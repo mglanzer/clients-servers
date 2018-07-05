@@ -16,7 +16,7 @@ class EntityWorkSupervisor(shardRef: ActorRef) extends Actor with ActorLogging w
   private val entityIds = Iterator.continually(Seq.range(1L, 20L)).flatten
   var workCounter: Long = 0
 
-  timers.startPeriodicTimer("distributeWork", HaveWork, 1.seconds)
+  timers.startPeriodicTimer("distributeWork", HaveWork, 100.milliseconds)
 
   override def receive: Receive = {
     case HaveWork =>

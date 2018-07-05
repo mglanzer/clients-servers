@@ -2,16 +2,19 @@ package mpg.servers.akka.http
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
+import spray.json._
+import DefaultJsonProtocol._
+import akka.cluster.Cluster
 
 import scala.concurrent.duration._
 
-case class EntityRestore(data: Long)
-
 case class EntityWork(entityId: Long, data: Long)
 
-case object Stop
+case class EntityReport(entityId: String, node: String, data: Long)
 
 object EntityActor {
+
+  implicit val entityReportFormat: RootJsonFormat[EntityReport] = jsonFormat3(EntityReport)
 
   private val shardRegion = "EntityActor"
 
@@ -38,9 +41,13 @@ object EntityActor {
   }
 }
 
-class EntityActor extends Actor with ActorLogging {
+class EntityActor extends Actor with WsUiSingletonSupport with ActorLogging {
+
+  import EntityActor.entityReportFormat
 
   context.setReceiveTimeout(20.seconds)
+
+  val cluster = Cluster(context.system)
 
   var data: Long = -1L
 
@@ -48,33 +55,14 @@ class EntityActor extends Actor with ActorLogging {
     data = newData
   }
 
-//  override def receiveRecover: Receive = {
-//    case EntityRestore(d) =>
-//      log.info("Recovering entity: " + self.path.name)
-//      update(d)
-//  }
-//
-//  override def receiveCommand: Receive = {
-//    case EntityWork(_, d) =>
-//      //update(d)
-//      val msg = s"${self.path.name} was $data, now working on $d"
-//      log.info(msg)
-//      context.actorSelection("akka.tcp://" + context.system.name + "@localhost:2551/user/wsUi") ! msg
-//    case ReceiveTimeout => context.parent ! Passivate(stopMessage = Stop)
-//    case Stop => context.stop(self)
-//
-//    case unknown => log.error(s"Don't know what to do with: $unknown")
-//  }
-//
-//  override def persistenceId: String = self.path.name
-
   override def receive: Receive = {
     case EntityWork(_, d) =>
-      val msg = s"${self.path.name} was $data, now working on $d"
       update(d)
-      log.info(msg)
-      context.actorSelection("akka.tcp://" + context.system.name + "@localhost:2551/user/wsUi") ! msg
-
-    case unknown => log.error(s"Don't know what to do with: $unknown")
+      log.info(s"${self.path.name} was $data, now working on $d")
+      wsUiProxy ! EntityReport(
+        self.path.name,
+        cluster.selfAddress.toString,
+        data)
+        .toJson.compactPrint
   }
 }
